@@ -27,6 +27,7 @@ dist/
 build/
 *.egg-info/
 
+# 文档（开发文档，不提交）
 docs/
 
 # 用户配置文件

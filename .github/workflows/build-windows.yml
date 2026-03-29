@@ -1,0 +1,53 @@
+name: Build Windows Executable
+
+on:
+  push:
+    branches: [ main, master ]
+  pull_request:
+    branches: [ main, master ]
+  # 允许手动触发
+  workflow_dispatch:
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+    strategy:
+      fail-fast: false
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Setup Python
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.11'
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install pyinstaller
+        pip install -r requirements.txt
+
+    - name: Build executable with PyInstaller
+      run: |
+        pyinstaller --onefile --windowed ^
+          --name="window-manager" ^
+          --add-data="presets.json;." ^
+          --hidden-import="pystray._win32" ^
+          --hidden-import="plyer.platforms.win.notification" ^
+          main.py
+
+    - name: Upload Windows executable
+      uses: actions/upload-artifact@v4
+      with:
+        name: window-manager-windows
+        path: dist/window-manager.exe
+
+    - name: Create Release (optional - on tag push)
+      if: startsWith(github.ref, 'refs/tags/')
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/window-manager.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
