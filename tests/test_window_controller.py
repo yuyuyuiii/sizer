@@ -79,64 +79,49 @@ def test_position_calculator_bottom():
 
 def test_window_controller_apply_preset_with_mock_window():
     """测试应用预设"""
-    with patch.object(WindowController, 'get_active_window') as mock_get_active:
-        mock_window = Mock()
-        mock_window.width = 1000
-        mock_window.height = 800
-        mock_window.left = 160
-        mock_window.top = 90
-        mock_window.resizeTo.side_effect = lambda width, height: (
-            setattr(mock_window, "width", width),
-            setattr(mock_window, "height", height),
-        )
-        mock_window.moveTo.side_effect = lambda left, top: (
-            setattr(mock_window, "left", left),
-            setattr(mock_window, "top", top),
-        )
-        mock_get_active.return_value = mock_window
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(SW_RESTORE=9, SWP_NOZORDER=0x0004, SWP_NOACTIVATE=0x0010)
+    fake_win32gui.GetWindowRect.side_effect = [
+        (160, 90, 1160, 890),
+        (160, 90, 1760, 990),
+    ]
 
+    with patch.object(WindowController, 'get_active_window_handle', return_value=999), \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
         controller = WindowController()
         preset = Preset(name="测试", width=1600, height=900, position="center")
 
         result = controller.apply_preset(preset)
 
         assert result == True
-        mock_window.restore.assert_called_once()
-        mock_window.resizeTo.assert_called_once_with(1600, 900)
-        mock_window.moveTo.assert_called_once()
+        fake_win32gui.ShowWindow.assert_called_once_with(999, fake_win32con.SW_RESTORE)
+        fake_win32gui.SetWindowPos.assert_called_once()
 
 
 def test_window_controller_apply_preset_keep_original_size():
     """测试保持原尺寸"""
-    with patch.object(WindowController, 'get_active_window') as mock_get_active:
-        mock_window = Mock()
-        mock_window.width = 1000
-        mock_window.height = 800
-        mock_window.left = 460
-        mock_window.top = 140
-        mock_window.resizeTo.side_effect = lambda width, height: (
-            setattr(mock_window, "width", width),
-            setattr(mock_window, "height", height),
-        )
-        mock_window.moveTo.side_effect = lambda left, top: (
-            setattr(mock_window, "left", left),
-            setattr(mock_window, "top", top),
-        )
-        mock_get_active.return_value = mock_window
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(SW_RESTORE=9, SWP_NOZORDER=0x0004, SWP_NOACTIVATE=0x0010)
+    fake_win32gui.GetWindowRect.side_effect = [
+        (460, 140, 1460, 940),
+        (460, 140, 1460, 940),
+    ]
 
+    with patch.object(WindowController, 'get_active_window_handle', return_value=999), \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
         controller = WindowController()
         preset = Preset(name="测试", position="center")  # 不指定尺寸
 
         result = controller.apply_preset(preset)
 
         assert result == True
-        mock_window.resizeTo.assert_called_once_with(1000, 800)  # 保持原尺寸
+        args = fake_win32gui.SetWindowPos.call_args[0]
+        assert args[5] == 800
 
 
 def test_window_controller_no_active_window():
     """测试无活动窗口"""
-    with patch.object(WindowController, 'get_active_window') as mock_get_active:
-        mock_get_active.return_value = None
+    with patch.object(WindowController, 'get_active_window_handle', return_value=None):
         controller = WindowController()
         preset = Preset(name="测试", width=1600, height=900, position="center")
         result = controller.apply_preset(preset)
@@ -253,42 +238,44 @@ def test_detect_screen_size_falls_back_to_desktop_physical_size_for_single_monit
 
 
 def test_window_controller_skips_own_active_window():
-    """测试活动窗口是工具自身时会回退到其他活动窗口"""
-    own_window = Mock()
-    own_window.isActive = True
-    own_window._hWnd = 100
-    target_window = Mock()
-    target_window.isActive = True
-    target_window._hWnd = 200
+    """测试前台窗口是工具自身时会回退到其他可用窗口"""
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(GWL_EXSTYLE=-20, WS_EX_TOOLWINDOW=0x80)
+    fake_win32gui.GetForegroundWindow.return_value = 100
+    fake_win32gui.IsWindow.return_value = True
+    fake_win32gui.IsWindowVisible.return_value = True
+    fake_win32gui.IsIconic.return_value = False
+    fake_win32gui.GetClassName.return_value = "Chrome_WidgetWin_1"
+    fake_win32gui.GetWindowText.return_value = "Target"
+    fake_win32gui.GetWindowLong.return_value = 0
 
-    fake_gw = types.SimpleNamespace(
-        getActiveWindow=lambda: own_window,
-        getAllWindows=lambda: [own_window, target_window],
-    )
+    def enum_windows(callback, arg):
+        callback(200, arg)
+
+    fake_win32gui.EnumWindows.side_effect = enum_windows
     fake_win32process = types.SimpleNamespace(
-        GetWindowThreadProcessId=Mock(side_effect=[(1, 9999), (1, 9999), (1, 8888)])
+        GetWindowThreadProcessId=Mock(side_effect=[(1, 9999), (1, 8888)])
     )
 
     with patch("window_controller.os.getpid", return_value=9999), \
-         patch.dict(sys.modules, {"pygetwindow": fake_gw, "win32process": fake_win32process}):
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con, "win32process": fake_win32process}):
         controller = WindowController()
-        result = controller.get_active_window()
+        result = controller.get_active_window_handle()
 
-    assert result is target_window
+    assert result == 200
 
 
 def test_apply_preset_returns_false_when_window_state_mismatch():
     """测试窗口调整后尺寸明显不匹配时返回失败"""
-    with patch.object(WindowController, "get_active_window") as mock_get_active:
-        mock_window = Mock()
-        mock_window.width = 1000
-        mock_window.height = 800
-        mock_window.left = 0
-        mock_window.top = 0
-        mock_window.resizeTo.side_effect = lambda width, height: None
-        mock_window.moveTo.side_effect = lambda left, top: None
-        mock_get_active.return_value = mock_window
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(SW_RESTORE=9, SWP_NOZORDER=0x0004, SWP_NOACTIVATE=0x0010)
+    fake_win32gui.GetWindowRect.side_effect = [
+        (0, 0, 1000, 800),
+        (0, 0, 1000, 800),
+    ]
 
+    with patch.object(WindowController, "get_active_window_handle", return_value=999), \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
         controller = WindowController()
         preset = Preset(name="测试", width=1600, height=900, position="center")
 
@@ -307,16 +294,8 @@ def test_apply_preset_prefers_win32_api_when_hwnd_available():
     )
     fake_win32gui.GetWindowRect.return_value = (160, 90, 1760, 990)
 
-    with patch.object(WindowController, "get_active_window") as mock_get_active, \
+    with patch.object(WindowController, "get_active_window_handle", return_value=999), \
          patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
-        mock_window = Mock()
-        mock_window.width = 1600
-        mock_window.height = 900
-        mock_window.left = 160
-        mock_window.top = 90
-        mock_window._hWnd = 999
-        mock_get_active.return_value = mock_window
-
         controller = WindowController()
         preset = Preset(name="测试", width=1600, height=900, position="center")
 
@@ -345,19 +324,67 @@ def test_apply_preset_reads_final_rect_from_win32_api():
     )
     fake_win32gui.GetWindowRect.return_value = (360, 140, 1560, 940)
 
-    with patch.object(WindowController, "get_active_window") as mock_get_active, \
+    with patch.object(WindowController, "get_active_window_handle", return_value=888), \
          patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
-        mock_window = Mock()
-        mock_window.width = 500
-        mock_window.height = 400
-        mock_window.left = 0
-        mock_window.top = 0
-        mock_window._hWnd = 888
-        mock_get_active.return_value = mock_window
-
         controller = WindowController()
         preset = Preset(name="测试", width=1200, height=800, position="center")
 
         result = controller.apply_preset(preset)
 
         assert result is True
+
+
+def test_position_calculator_converts_physical_values_to_logical_coordinates():
+    """测试在 DPI 缩放场景下，会把物理目标值转换为逻辑坐标去设置窗口"""
+    calc = PositionCalculator(screen_width=2560, screen_height=1440)
+    calc.logical_screen_width = 2048
+    calc.logical_screen_height = 1152
+
+    assert calc.to_logical_width(1600) == 1280
+    assert calc.to_logical_height(900) == 720
+    assert calc.to_logical_x(480) == 384
+    assert calc.to_logical_y(270) == 216
+
+
+def test_apply_preset_uses_logical_coordinates_when_screen_is_scaled():
+    """测试窗口调整会把物理预设换算成逻辑坐标传给 Win32 API"""
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(
+        SW_RESTORE=9,
+        SWP_NOZORDER=0x0004,
+        SWP_NOACTIVATE=0x0010,
+    )
+    fake_win32gui.GetWindowRect.return_value = (384, 216, 1664, 936)
+
+    with patch.object(WindowController, "get_active_window_handle", return_value=999), \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
+        controller = WindowController()
+        controller.calculator.screen_width = 2560
+        controller.calculator.screen_height = 1440
+        controller.calculator.logical_screen_width = 2048
+        controller.calculator.logical_screen_height = 1152
+
+        preset = Preset(name="测试", width=1600, height=900, position="center")
+        result = controller.apply_preset(preset)
+
+        assert result is True
+        fake_win32gui.SetWindowPos.assert_called_once_with(
+            999,
+            None,
+            384,
+            216,
+            1280,
+            720,
+            fake_win32con.SWP_NOZORDER | fake_win32con.SWP_NOACTIVATE,
+        )
+
+
+def test_get_active_window_handle_falls_back_to_cached_window():
+    """测试托盘点击导致无前台外部窗口时，会回退到最近一次外部窗口"""
+    fake_win32gui = types.SimpleNamespace(GetForegroundWindow=lambda: 0, IsWindow=lambda hwnd: hwnd == 321)
+    fake_win32con = types.SimpleNamespace()
+    controller = WindowController()
+    controller.last_active_hwnd = 321
+
+    with patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
+        assert controller.get_active_window_handle() == 321
