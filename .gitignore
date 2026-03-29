@@ -28,3 +28,6 @@ build/
 *.egg-info/
 
 docs/
+
+# 用户配置文件
+presets.json
