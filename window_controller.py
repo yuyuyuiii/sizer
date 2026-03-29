@@ -41,38 +41,39 @@ class PositionCalculator:
         """
         win_width, win_height = window_size
 
-        # 计算位置(不限制窗口尺寸,允许窗口大于屏幕)
+        # 计算位置（限制窗口在屏幕可见区域内）
+        # 即使窗口大于屏幕，也确保至少左上角对齐屏幕左上角
         if position == "center":
-            left = (self.screen_width - win_width) // 2
-            top = (self.screen_height - win_height) // 2
+            left = max(0, (self.screen_width - win_width) // 2)
+            top = max(0, (self.screen_height - win_height) // 2)
         elif position == "top-left":
             left = 0
             top = 0
         elif position == "top-right":
-            left = self.screen_width - win_width
+            left = max(0, self.screen_width - win_width)
             top = 0
         elif position == "bottom-left":
             left = 0
-            top = self.screen_height - win_height
+            top = max(0, self.screen_height - win_height)
         elif position == "bottom-right":
-            left = self.screen_width - win_width
-            top = self.screen_height - win_height
+            left = max(0, self.screen_width - win_width)
+            top = max(0, self.screen_height - win_height)
         elif position == "left":
             left = 0
-            top = (self.screen_height - win_height) // 2
+            top = max(0, (self.screen_height - win_height) // 2)
         elif position == "right":
-            left = self.screen_width - win_width
-            top = (self.screen_height - win_height) // 2
+            left = max(0, self.screen_width - win_width)
+            top = max(0, (self.screen_height - win_height) // 2)
         elif position == "top":
-            left = (self.screen_width - win_width) // 2
+            left = max(0, (self.screen_width - win_width) // 2)
             top = 0
         elif position == "bottom":
-            left = (self.screen_width - win_width) // 2
-            top = self.screen_height - win_height
+            left = max(0, (self.screen_width - win_width) // 2)
+            top = max(0, self.screen_height - win_height)
         else:
             # 未知位置，默认居中
-            left = (self.screen_width - win_width) // 2
-            top = (self.screen_height - win_height) // 2
+            left = max(0, (self.screen_width - win_width) // 2)
+            top = max(0, (self.screen_height - win_height) // 2)
 
         return (left, top)
 
@@ -117,7 +118,7 @@ class WindowController:
             # 记录窗口初始状态
             logger.info(f"=== 应用预设: {preset.name} ===")
             logger.info(f"预设参数: width={preset.width}, height={preset.height}, position={preset.position}")
-            logger.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
+            logger.info(f"屏幕分辨率: {self.calculator.screen_width}x{self.calculator.screen_height}")
 
             # 记录窗口当前状态
             try:
@@ -139,6 +140,13 @@ class WindowController:
                 logger.debug("调用 window.restore()")
                 window.restore()
                 logger.debug("restore() 执行完成")
+                # 记录 restore 后的窗口状态
+                try:
+                    restored_width = window.width
+                    restored_height = window.height
+                    logger.info(f"restore 后窗口尺寸: {restored_width}x{restored_height}")
+                except Exception:
+                    pass
             except Exception as e:
                 logger.warning(f"restore() 失败: {e}")
                 # 如果 restore 失败，继续尝试
