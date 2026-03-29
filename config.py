@@ -28,6 +28,67 @@ class ConfigLoader:
         self.config_dict = config_dict
         self._validated = False
 
+    def _validate_dimension(self, value: Any, field_name: str, preset_idx: int) -> None:
+        """验证宽高度字段"""
+        if not isinstance(value, int):
+            raise ConfigValidationError(
+                f"第 {preset_idx+1} 个预设的 '{field_name}' 必须是整数"
+            )
+        if value < 1 or value > 7680:
+            raise ConfigValidationError(
+                f"第 {preset_idx+1} 个预设的 '{field_name}' 必须在 1-7680 之间，当前值: {value}"
+            )
+
+    def _validate_preset_fields(self, preset: Dict[str, Any], idx: int) -> None:
+        """验证预设字段"""
+        # 验证 position 字段
+        position = preset.get("position", "center")
+        if position not in VALID_POSITIONS:
+            raise ConfigValidationError(
+                f"第 {idx+1} 个预设的 'position' 无效: '{position}'。"
+                f"有效值为: {', '.join(sorted(VALID_POSITIONS))}"
+            )
+
+        # 验证 width 字段
+        if "width" in preset:
+            self._validate_dimension(preset["width"], "width", idx)
+
+        # 验证 height 字段
+        if "height" in preset:
+            self._validate_dimension(preset["height"], "height", idx)
+
+        # 验证 hotkey 字段
+        hotkey = preset.get("hotkey")
+        if hotkey is not None and not isinstance(hotkey, str):
+            raise ConfigValidationError(
+                f"第 {idx+1} 个预设的 'hotkey' 必须是字符串"
+            )
+
+    def _validate_preset_structure(self, preset: Dict[str, Any], idx: int) -> None:
+        """验证单个预设结构"""
+        if not isinstance(preset, dict):
+            raise ConfigValidationError(f"第 {idx+1} 个预设必须是字典类型")
+
+        # 验证 name 字段
+        if "name" not in preset:
+            raise ConfigValidationError(f"第 {idx+1} 个预设缺少 'name' 字段")
+        if not isinstance(preset["name"], str):
+            raise ConfigValidationError(f"第 {idx+1} 个预设的 'name' 必须是字符串")
+        if not preset["name"].strip():
+            raise ConfigValidationError(f"第 {idx+1} 个预设的 'name' 不能为空")
+
+    def _validate_structure(self, config_dict: Dict[str, Any]) -> None:
+        """验证配置文件结构"""
+        if not isinstance(config_dict, dict):
+            raise ConfigValidationError("配置必须是字典类型")
+
+        if "presets" not in config_dict:
+            raise ConfigValidationError("配置缺少 'presets' 字段")
+
+        presets = config_dict["presets"]
+        if not isinstance(presets, list):
+            raise ConfigValidationError("'presets' 必须是列表类型")
+
     def validate(self) -> None:
         """
         验证配置格式
@@ -35,66 +96,11 @@ class ConfigLoader:
         Raises:
             ConfigValidationError: 当配置无效时
         """
-        if not isinstance(self.config_dict, dict):
-            raise ConfigValidationError("配置必须是字典类型")
+        self._validate_structure(self.config_dict)
 
-        if "presets" not in self.config_dict:
-            raise ConfigValidationError("配置缺少 'presets' 字段")
-
-        presets = self.config_dict["presets"]
-        if not isinstance(presets, list):
-            raise ConfigValidationError("'presets' 必须是列表类型")
-
-        for i, preset in enumerate(presets):
-            if not isinstance(preset, dict):
-                raise ConfigValidationError(f"第 {i+1} 个预设必须是字典类型")
-
-            # 验证 name 字段
-            if "name" not in preset:
-                raise ConfigValidationError(f"第 {i+1} 个预设缺少 'name' 字段")
-            if not isinstance(preset["name"], str):
-                raise ConfigValidationError(f"第 {i+1} 个预设的 'name' 必须是字符串")
-            if not preset["name"].strip():
-                raise ConfigValidationError(f"第 {i+1} 个预设的 'name' 不能为空")
-
-            # 验证 position 字段
-            position = preset.get("position", "center")
-            if position not in VALID_POSITIONS:
-                raise ConfigValidationError(
-                    f"第 {i+1} 个预设的 'position' 无效: '{position}'。"
-                    f"有效值为: {', '.join(sorted(VALID_POSITIONS))}"
-                )
-
-            # 验证 width 字段
-            if "width" in preset:
-                width = preset["width"]
-                if not isinstance(width, int):
-                    raise ConfigValidationError(
-                        f"第 {i+1} 个预设的 'width' 必须是整数"
-                    )
-                if width < 1 or width > 7680:
-                    raise ConfigValidationError(
-                        f"第 {i+1} 个预设的 'width' 必须在 1-7680 之间，当前值: {width}"
-                    )
-
-            # 验证 height 字段
-            if "height" in preset:
-                height = preset["height"]
-                if not isinstance(height, int):
-                    raise ConfigValidationError(
-                        f"第 {i+1} 个预设的 'height' 必须是整数"
-                    )
-                if height < 1 or height > 7680:
-                    raise ConfigValidationError(
-                        f"第 {i+1} 个预设的 'height' 必须在 1-7680 之间，当前值: {height}"
-                    )
-
-            # 验证 hotkey 字段
-            if "hotkey" in preset and preset["hotkey"] is not None:
-                if not isinstance(preset["hotkey"], str):
-                    raise ConfigValidationError(
-                        f"第 {i+1} 个预设的 'hotkey' 必须是字符串"
-                    )
+        for i, preset in enumerate(self.config_dict["presets"]):
+            self._validate_preset_structure(preset, i)
+            self._validate_preset_fields(preset, i)
 
         self._validated = True
 
@@ -151,7 +157,7 @@ def load_config(filepath: str = "presets.json") -> List[Preset]:
                 return []
             config_dict = json.loads(content)
     except json.JSONDecodeError as e:
-        raise ConfigValidationError(f"JSON 解析错误: {e}")
+        raise ConfigValidationError(f"JSON 解析错误: {e}") from e
 
     loader = ConfigLoader(config_dict)
     loader.validate()
