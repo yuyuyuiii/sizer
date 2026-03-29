@@ -144,30 +144,35 @@ class WindowManagerApp:
 
         log_file = log_dir / "app.log"
 
-        # 配置日志
-        self.logger = logging.getLogger("WindowManager")
-        self.logger.setLevel(logging.DEBUG)
+        # 配置根 logger (捕获所有)
+        root_logger = logging.getLogger()
+        root_logger.setLevel(logging.DEBUG)
 
-        # 文件处理器 (轮转)
+        # 文件处理器 - 所有级别
         file_handler = logging.FileHandler(log_file, encoding='utf-8')
         file_handler.setLevel(logging.DEBUG)
 
-        # 控制台处理器
+        # 控制台处理器 - 只显示 INFO 及以上
         console_handler = logging.StreamHandler()
         console_handler.setLevel(logging.INFO)
 
         # 格式化器
         formatter = logging.Formatter(
-            '%(asctime)s - %(levelname)s - %(message)s',
+            '%(asctime)s - %(name)s - %(levelname)s - %(message)s',
             datefmt='%Y-%m-%d %H:%M:%S'
         )
         file_handler.setFormatter(formatter)
         console_handler.setFormatter(formatter)
 
-        # 添加处理器
-        self.logger.addHandler(file_handler)
-        self.logger.addHandler(console_handler)
+        # 清除已有的 handlers (避免重复)
+        for handler in root_logger.handlers[:]:
+            root_logger.removeHandler(handler)
 
+        root_logger.addHandler(file_handler)
+        root_logger.addHandler(console_handler)
+
+        # 测试日志
+        self.logger = logging.getLogger("WindowManager")
         self.logger.info("=" * 50)
         self.logger.info("Window Manager 启动")
         self.logger.info(f"日志文件: {log_file}")
