@@ -240,3 +240,69 @@ def test_apply_preset_returns_false_when_window_state_mismatch():
         result = controller.apply_preset(preset)
 
         assert result is False
+
+
+def test_apply_preset_prefers_win32_api_when_hwnd_available():
+    """测试有 hwnd 时优先使用 Win32 API 调整窗口"""
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(
+        SW_RESTORE=9,
+        SWP_NOZORDER=0x0004,
+        SWP_NOACTIVATE=0x0010,
+    )
+    fake_win32gui.GetWindowRect.return_value = (160, 90, 1760, 990)
+
+    with patch.object(WindowController, "get_active_window") as mock_get_active, \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
+        mock_window = Mock()
+        mock_window.width = 1600
+        mock_window.height = 900
+        mock_window.left = 160
+        mock_window.top = 90
+        mock_window._hWnd = 999
+        mock_get_active.return_value = mock_window
+
+        controller = WindowController()
+        preset = Preset(name="测试", width=1600, height=900, position="center")
+
+        result = controller.apply_preset(preset)
+
+        assert result is True
+        fake_win32gui.ShowWindow.assert_called_once_with(999, fake_win32con.SW_RESTORE)
+        fake_win32gui.SetWindowPos.assert_called_once_with(
+            999,
+            None,
+            160,
+            90,
+            1600,
+            900,
+            fake_win32con.SWP_NOZORDER | fake_win32con.SWP_NOACTIVATE,
+        )
+
+
+def test_apply_preset_reads_final_rect_from_win32_api():
+    """测试结果校验优先读取 Win32 API 的真实窗口矩形"""
+    fake_win32gui = Mock()
+    fake_win32con = types.SimpleNamespace(
+        SW_RESTORE=9,
+        SWP_NOZORDER=0x0004,
+        SWP_NOACTIVATE=0x0010,
+    )
+    fake_win32gui.GetWindowRect.return_value = (360, 140, 1560, 940)
+
+    with patch.object(WindowController, "get_active_window") as mock_get_active, \
+         patch.dict(sys.modules, {"win32gui": fake_win32gui, "win32con": fake_win32con}):
+        mock_window = Mock()
+        mock_window.width = 500
+        mock_window.height = 400
+        mock_window.left = 0
+        mock_window.top = 0
+        mock_window._hWnd = 888
+        mock_get_active.return_value = mock_window
+
+        controller = WindowController()
+        preset = Preset(name="测试", width=1200, height=800, position="center")
+
+        result = controller.apply_preset(preset)
+
+        assert result is True

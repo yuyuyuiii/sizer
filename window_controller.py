@@ -181,6 +181,54 @@ class WindowController:
             return True
         return abs(actual - expected) <= WINDOW_TOLERANCE
 
+    def _restore_window(self, window) -> None:
+        hwnd = getattr(window, "_hWnd", None)
+        if hwnd is not None:
+            try:
+                import win32con
+                import win32gui
+
+                win32gui.ShowWindow(hwnd, win32con.SW_RESTORE)
+                return
+            except Exception:
+                logger.debug("使用 Win32 API 恢复窗口失败: hwnd=%s", hwnd, exc_info=True)
+
+        window.restore()
+
+    def _apply_window_bounds(self, window, left: int, top: int, width: int, height: int) -> None:
+        hwnd = getattr(window, "_hWnd", None)
+        if hwnd is not None:
+            try:
+                import win32con
+                import win32gui
+
+                flags = win32con.SWP_NOZORDER | win32con.SWP_NOACTIVATE
+                win32gui.SetWindowPos(hwnd, None, left, top, width, height, flags)
+                return
+            except Exception:
+                logger.debug("使用 Win32 API 调整窗口失败: hwnd=%s", hwnd, exc_info=True)
+
+        window.resizeTo(width, height)
+        window.moveTo(left, top)
+
+    def _read_window_state(self, window) -> Tuple[Optional[int], Optional[int], Optional[int], Optional[int]]:
+        hwnd = getattr(window, "_hWnd", None)
+        if hwnd is not None:
+            try:
+                import win32gui
+
+                left, top, right, bottom = win32gui.GetWindowRect(hwnd)
+                return (right - left, bottom - top, left, top)
+            except Exception:
+                logger.debug("使用 Win32 API 读取窗口矩形失败: hwnd=%s", hwnd, exc_info=True)
+
+        return (
+            getattr(window, "width", None),
+            getattr(window, "height", None),
+            getattr(window, "left", None),
+            getattr(window, "top", None),
+        )
+
     def apply_preset(self, preset: "Preset") -> bool:
         """应用预设到当前活动窗口。"""
         root_logger = logging.getLogger()
@@ -210,7 +258,7 @@ class WindowController:
                 root_logger.warning("无法获取窗口当前尺寸", exc_info=True)
 
             try:
-                window.restore()
+                self._restore_window(window)
             except Exception:
                 root_logger.warning("restore() 失败", exc_info=True)
 
@@ -223,13 +271,8 @@ class WindowController:
 
             left, top = self.calculator.calculate(preset.position, (target_width, target_height))
 
-            window.resizeTo(target_width, target_height)
-            window.moveTo(left, top)
-
-            final_width = getattr(window, "width", None)
-            final_height = getattr(window, "height", None)
-            final_left = getattr(window, "left", None)
-            final_top = getattr(window, "top", None)
+            self._apply_window_bounds(window, left, top, target_width, target_height)
+            final_width, final_height, final_left, final_top = self._read_window_state(window)
 
             size_ok = self._matches_target(final_width, target_width) and self._matches_target(
                 final_height, target_height

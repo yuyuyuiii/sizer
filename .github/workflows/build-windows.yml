@@ -36,6 +36,10 @@ jobs:
           --add-data="presets.json;." `
           --hidden-import="pystray._win32" `
           --hidden-import="plyer.platforms.win.notification" `
+          --hidden-import="win32api" `
+          --hidden-import="win32con" `
+          --hidden-import="win32gui" `
+          --hidden-import="win32process" `
           main.py
 
     - name: Upload Windows executable
