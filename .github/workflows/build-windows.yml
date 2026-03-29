@@ -31,11 +31,11 @@ jobs:
 
     - name: Build executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed ^
-          --name="window-manager" ^
-          --add-data="presets.json;." ^
-          --hidden-import="pystray._win32" ^
-          --hidden-import="plyer.platforms.win.notification" ^
+        pyinstaller --onefile --windowed `
+          --name="window-manager" `
+          --add-data="presets.json;." `
+          --hidden-import="pystray._win32" `
+          --hidden-import="plyer.platforms.win.notification" `
           main.py
 
     - name: Upload Windows executable
