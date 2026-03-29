@@ -185,11 +185,25 @@ def test_detect_screen_size_prefers_cursor_monitor():
     fake_win32api.GetCursorPos.return_value = (2100, 100)
     fake_win32api.EnumDisplayMonitors.return_value = monitors
     fake_win32api.GetSystemMetrics.side_effect = AssertionError("不应回退到系统指标")
-    fake_win32gui = Mock()
-    fake_win32gui.GetMonitorInfo.side_effect = [
+    fake_win32api.GetMonitorInfo.side_effect = [
         {"Monitor": (0, 0, 1920, 1080)},
         {"Monitor": (1920, 0, 4480, 1440)},
     ]
+    fake_win32gui = Mock()
+
+    with patch.dict(sys.modules, {"win32api": fake_win32api, "win32gui": fake_win32gui, "win32con": Mock()}):
+        calc = PositionCalculator()
+
+    assert (calc.screen_width, calc.screen_height) == (2560, 1440)
+
+
+def test_detect_screen_size_uses_win32api_get_monitor_info_when_win32gui_missing():
+    """测试 win32gui 缺少 GetMonitorInfo 时仍可通过 win32api 正常检测"""
+    fake_win32api = Mock()
+    fake_win32api.GetCursorPos.return_value = (100, 100)
+    fake_win32api.EnumDisplayMonitors.return_value = [("primary", None, None)]
+    fake_win32api.GetMonitorInfo.return_value = {"Monitor": (0, 0, 2560, 1440)}
+    fake_win32gui = types.SimpleNamespace()
 
     with patch.dict(sys.modules, {"win32api": fake_win32api, "win32gui": fake_win32gui, "win32con": Mock()}):
         calc = PositionCalculator()

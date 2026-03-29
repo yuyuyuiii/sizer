@@ -29,6 +29,17 @@ class PositionCalculator:
         rect = monitor_info["Monitor"]
         return (rect[2] - rect[0], rect[3] - rect[1])
 
+    def _get_monitor_info(self, monitor_handle, win32api, win32gui):
+        get_monitor_info = getattr(win32api, "GetMonitorInfo", None)
+        if callable(get_monitor_info):
+            return get_monitor_info(monitor_handle)
+
+        get_monitor_info = getattr(win32gui, "GetMonitorInfo", None)
+        if callable(get_monitor_info):
+            return get_monitor_info(monitor_handle)
+
+        raise AttributeError("win32api/win32gui 都不支持 GetMonitorInfo")
+
     def _detect_screen_size(self) -> Tuple[int, int]:
         """检测屏幕尺寸，优先选择光标或活动窗口所在显示器。"""
         try:
@@ -44,7 +55,7 @@ class PositionCalculator:
             monitors = win32api.EnumDisplayMonitors()
             logger.info("检测到 %s 个显示器", len(monitors))
             for idx, (hmonitor, _, _) in enumerate(monitors, start=1):
-                info = win32gui.GetMonitorInfo(hmonitor)
+                info = self._get_monitor_info(hmonitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
                 rect = info["Monitor"]
                 logger.info("显示器%s: %sx%s, rect=%s", idx, width, height, rect)
@@ -58,7 +69,7 @@ class PositionCalculator:
             hwnd = win32gui.GetForegroundWindow()
             if hwnd:
                 monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
-                info = win32gui.GetMonitorInfo(monitor)
+                info = self._get_monitor_info(monitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
                 logger.info("选择活动窗口所在显示器: %sx%s", width, height)
                 return (width, height)
@@ -70,7 +81,7 @@ class PositionCalculator:
             largest = None
             max_area = -1
             for hmonitor, _, _ in monitors:
-                info = win32gui.GetMonitorInfo(hmonitor)
+                info = self._get_monitor_info(hmonitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
                 area = width * height
                 if area > max_area:
