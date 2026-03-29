@@ -31,7 +31,7 @@ jobs:
 
     - name: Build executable with PyInstaller
       run: |
-        pyinstaller --onefile --windowed `
+        pyinstaller --onefile `
           --name="window-manager" `
           --add-data="presets.json;." `
           --hidden-import="pystray._win32" `
