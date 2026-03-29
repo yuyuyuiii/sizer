@@ -116,7 +116,7 @@ def test_tray_icon_stop():
 
 
 def test_tray_icon_run_creates_icon_and_hides_taskbar_window():
-    """测试 run 方法创建图标并调用任务栏隐藏逻辑"""
+    """测试 run 方法创建图标，但不再调用可能破坏托盘交互的隐藏逻辑"""
     from models import Preset
 
     tray_icon = import_tray_icon()
@@ -133,7 +133,7 @@ def test_tray_icon_run_creates_icon_and_hides_taskbar_window():
         manager = tray_icon.TrayIconManager(presets)
         manager.run()
         fake_pystray.Icon.assert_called_once()
-        mock_hide.assert_called_once()
+        mock_hide.assert_not_called()
 
 
 def test_load_pystray_returns_none_when_backend_unavailable():
@@ -173,3 +173,10 @@ def test_hide_taskbar_window_updates_windows_style():
     fake_win32gui.EnumWindows.assert_called_once()
     fake_win32gui.SetWindowLong.assert_called()
     fake_win32gui.ShowWindow.assert_called()
+
+
+def test_schedule_taskbar_hide_is_noop():
+    """测试任务栏隐藏调度已禁用，避免破坏 pystray 交互"""
+    tray_icon = import_tray_icon()
+    manager = tray_icon.TrayIconManager([])
+    manager._schedule_taskbar_hide()

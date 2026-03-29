@@ -115,9 +115,7 @@ class TrayIconManager:
         return pystray.Menu(*menu_items)
 
     def _schedule_taskbar_hide(self) -> None:
-        timer = threading.Timer(0.5, _hide_taskbar_windows_for_current_process)
-        timer.daemon = True
-        timer.start()
+        logger.info("已禁用任务栏窗口隐藏逻辑，避免影响托盘交互")
 
     def _on_preset_clicked(self, preset_name: str) -> None:
         if self.on_preset_selected:
@@ -145,7 +143,6 @@ class TrayIconManager:
             "Window Sizer",
             self._create_menu(),
         )
-        self._schedule_taskbar_hide()
         self.icon.run()
 
     def stop(self) -> None:
