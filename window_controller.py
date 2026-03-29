@@ -17,21 +17,73 @@ class PositionCalculator:
             screen_height: 屏幕高度，如果不提供则自动检测
         """
         if screen_width is None or screen_height is None:
-            try:
-                import win32api
-                # 使用 SM_CXSCREEN 和 SM_CYSCREEN 获取真实屏幕分辨率
-                # GetSystemMetrics(0) 返回工作区宽度(不含任务栏)
-                # GetSystemMetrics(78) 返回屏幕宽度 SM_CXSCREEN
-                # GetSystemMetrics(79) 返回屏幕高度 SM_CYSCREEN
-                screen_width = screen_width or win32api.GetSystemMetrics(78)  # SM_CXSCREEN
-                screen_height = screen_height or win32api.GetSystemMetrics(79)  # SM_CYSCREEN
-            except ImportError:
-                # 无法导入 win32api 时使用默认值
-                screen_width = screen_width or 1920
-                screen_height = screen_height or 1080
+            # 尝试使用多种方法获取真实屏幕分辨率
+            screen_width, screen_height = self._detect_screen_size()
 
         self.screen_width = screen_width
         self.screen_height = screen_height
+
+    def _detect_screen_size(self) -> Tuple[int, int]:
+        """检测屏幕尺寸,尝试多种方法"""
+        import logging
+        logger = logging.getLogger("WindowController")
+
+        try:
+            import win32api
+            import win32con
+
+            # 方法 1: 使用 GetSystemMetrics 和 SM_CXSCREEN/SM_CYSCREEN
+            try:
+                width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+                height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+                logger.info(f"方法1 GetSystemMetrics(SM_CXSCREEN/SM_CYSCREEN): {width}x{height}")
+                if width > 0 and height > 0:
+                    return (width, height)
+            except Exception as e:
+                logger.debug(f"方法1失败: {e}")
+
+            # 方法 2: 使用枚举显示器 - 寻找最大的显示器
+            try:
+                import win32gui
+                monitors = win32api.EnumDisplayMonitors()
+                logger.info(f"检测到 {len(monitors)} 个显示器")
+                if monitors:
+                    max_area = 0
+                    best_monitor = None
+                    for idx, (hmonitor, _, _) in enumerate(monitors):
+                        info = win32gui.GetMonitorInfo(hmonitor)
+                        rc = info['Monitor']
+                        w = rc[2] - rc[0]
+                        h = rc[3] - rc[1]
+                        area = w * h
+                        logger.info(f"  显示器{idx+1}: {w}x{h} (面积={area})")
+                        if area > max_area:
+                            max_area = area
+                            best_monitor = (w, h)
+                    if best_monitor:
+                        logger.info(f"选择最大显示器: {best_monitor[0]}x{best_monitor[1]}")
+                        return best_monitor
+            except Exception as e:
+                logger.debug(f"方法2失败: {e}")
+
+            # 方法 3: 使用 SM_CXFULLSCREEN/SM_CYFULLSCREEN (工作区)
+            try:
+                width = win32api.GetSystemMetrics(win32con.SM_CXFULLSCREEN)
+                height = win32api.GetSystemMetrics(win32con.SM_CYFULLSCREEN)
+                logger.info(f"方法3 GetSystemMetrics(SM_CXFULLSCREEN/SM_CYFULLSCREEN): {width}x{height}")
+                if width > 0 and height > 0:
+                    return (width, height)
+            except Exception as e:
+                logger.debug(f"方法3失败: {e}")
+
+            # 方法 4: 使用硬编码的默认值
+            logger.warning("所有检测方法失败,使用默认值 1920x1080")
+            return (1920, 1080)
+
+        except ImportError:
+            # 无法导入 win32api 时使用默认值
+            logger.warning("未找到 win32api,使用默认值 1920x1080")
+            return (1920, 1080)
 
     def calculate(self, position: str, window_size: Tuple[int, int]) -> Tuple[int, int]:
         """计算窗口位置
