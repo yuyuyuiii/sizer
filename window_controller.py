@@ -105,15 +105,42 @@ class WindowController:
         Returns:
             成功返回 True，失败返回 False
         """
+        import logging
+        logger = logging.getLogger("WindowController")
+
         try:
             window = self.get_active_window()
             if window is None:
+                logger.warning("未找到活动窗口")
                 return False
+
+            # 记录窗口初始状态
+            logger.info(f"=== 应用预设: {preset.name} ===")
+            logger.info(f"预设参数: width={preset.width}, height={preset.height}, position={preset.position}")
+            logger.info(f"屏幕分辨率: {self.screen_width}x{self.screen_height}")
+
+            # 记录窗口当前状态
+            try:
+                current_width = window.width
+                current_height = window.height
+                logger.info(f"窗口当前尺寸: {current_width}x{current_height}")
+                # 尝试获取最大化状态（如果支持）
+                try:
+                    is_maximized = getattr(window, 'is_maximized', None)
+                    if is_maximized is not None:
+                        logger.info(f"窗口最大化状态: {is_maximized}")
+                except Exception:
+                    pass
+            except Exception as e:
+                logger.warning(f"无法获取窗口当前尺寸: {e}")
 
             # 如果窗口最小化或最大化，先恢复
             try:
+                logger.debug("调用 window.restore()")
                 window.restore()
-            except Exception:
+                logger.debug("restore() 执行完成")
+            except Exception as e:
+                logger.warning(f"restore() 失败: {e}")
                 # 如果 restore 失败，继续尝试
                 pass
 
@@ -126,13 +153,35 @@ class WindowController:
                 target_width = window.width
                 target_height = window.height
 
+            logger.info(f"目标尺寸: {target_width}x{target_height}")
+
             # 计算目标位置
             left, top = self.calculator.calculate(preset.position, (target_width, target_height))
+            logger.info(f"计算出的位置: left={left}, top={top}")
 
             # 应用尺寸和位置
+            logger.info(f"准备调用: resizeTo({target_width}, {target_height})")
             window.resizeTo(target_width, target_height)
+            logger.info(f"resizeTo 完成")
+
+            logger.info(f"准备调用: moveTo({left}, {top})")
             window.moveTo(left, top)
+            logger.info(f"moveTo 完成")
+
+            # 验证结果
+            try:
+                final_width = window.width
+                final_height = window.height
+                final_left = window.left if hasattr(window, 'left') else None
+                final_top = window.top if hasattr(window, 'top') else None
+                logger.info(f"最终窗口尺寸: {final_width}x{final_height}")
+                if final_left is not None and final_top is not None:
+                    logger.info(f"最终窗口位置: left={final_left}, top={final_top}")
+                logger.info(f"=== 预设应用完成 ===")
+            except Exception as e:
+                logger.warning(f"无法获取最终窗口状态: {e}")
 
             return True
-        except Exception:
+        except Exception as e:
+            logger.exception(f"应用预设失败: {e}")
             return False

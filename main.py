@@ -41,8 +41,7 @@ class WindowManagerApp:
             # 打印并通知加载数量
             count = len(self.presets)
             print(f"已加载 {count} 个预设")
-            if count > 0:
-                self.notifier.show("加载成功", f"已加载 {count} 个预设", error=False)
+            # 不再显示加载成功的通知,避免打扰
 
             # 2. 注册热键
             self.hotkey_manager.register_presets(self.presets, self._on_hotkey_triggered)
@@ -128,9 +127,8 @@ class WindowManagerApp:
         # 应用预设
         success = self.window_controller.apply_preset(preset)
 
-        # 显示通知
+        # 显示通知(只有失败时才弹窗)
         if success:
-            self.notifier.preset_applied(preset_name)
             if self.logger:
                 self.logger.info(f"预设 '{preset_name}' 应用成功")
         else:
@@ -190,8 +188,8 @@ class WindowManagerApp:
             print("Window Manager 已启动")
             print("提示：可以通过托盘图标或热键触发窗口预设")
 
-        # 显示启动通知
-        self.notifier.show("Window Manager", "已启动，托盘图标已显示", error=False)
+        # 不显示启动通知,避免打扰
+        pass
 
         # 设置信号处理
         signal.signal(signal.SIGINT, self._signal_handler)
