@@ -1,6 +1,9 @@
 """热键管理器模块"""
 from typing import Callable, List
+import logging
 import keyboard
+
+logger = logging.getLogger("HotkeyManager")
 
 
 class DuplicateHotkeyError(Exception):
@@ -34,8 +37,17 @@ class HotkeyManager:
         if hotkey in self.registered_hotkeys:
             raise DuplicateHotkeyError(f"热键 '{hotkey}' 已被注册")
 
-        self._keyboard.add_hotkey(hotkey, callback, args=args, suppress=False)
-        self.registered_hotkeys[hotkey] = callback
+        def wrapped_callback(*callback_args):
+            logger.info("热键触发: hotkey=%s, args=%s", hotkey, callback_args)
+            try:
+                callback(*callback_args)
+            except Exception:
+                logger.exception("热键回调执行失败: hotkey=%s", hotkey)
+                raise
+
+        self._keyboard.add_hotkey(hotkey, wrapped_callback, args=args, suppress=False)
+        self.registered_hotkeys[hotkey] = wrapped_callback
+        logger.info("注册热键: hotkey=%s, args=%s", hotkey, args)
         return True
 
     def unregister(self, hotkey: str) -> bool:
@@ -66,6 +78,8 @@ class HotkeyManager:
         for preset in presets:
             if preset.hotkey:
                 self.register(preset.hotkey, callback, args=(preset.name,))
+            else:
+                logger.debug("跳过无热键预设: %s", preset.name)
 
     def unregister_all(self) -> None:
         """注销所有已注册的热键"""

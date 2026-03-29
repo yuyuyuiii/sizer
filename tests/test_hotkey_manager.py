@@ -9,9 +9,11 @@ def test_hotkey_manager_register():
         manager = HotkeyManager()
         callback = Mock()
         manager.register("ctrl+shift+c", callback)
-        mock_keyboard.add_hotkey.assert_called_once_with(
-            "ctrl+shift+c", callback, args=(), suppress=False
-        )
+        mock_keyboard.add_hotkey.assert_called_once()
+        registered_callback = mock_keyboard.add_hotkey.call_args[0][1]
+        assert callable(registered_callback)
+        registered_callback()
+        callback.assert_called_once_with()
         assert "ctrl+shift+c" in manager.registered_hotkeys
 
 

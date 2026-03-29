@@ -102,7 +102,8 @@ class TrayIconManager:
 
         for preset in self.presets:
             def make_handler(name):
-                def handler(item):
+                def handler(icon, item):
+                    logger.info("托盘菜单点击预设: %s", name)
                     self._on_preset_clicked(name)
                 return handler
 
@@ -119,9 +120,14 @@ class TrayIconManager:
         timer.start()
 
     def _on_preset_clicked(self, preset_name: str) -> None:
-        print(f"[调试] 托盘菜单点击预设: '{preset_name}'")
         if self.on_preset_selected:
-            self.on_preset_selected(preset_name)
+            try:
+                self.on_preset_selected(preset_name)
+            except Exception:
+                logger.exception("托盘预设回调执行失败: %s", preset_name)
+                raise
+        else:
+            logger.warning("托盘预设点击时未设置回调: %s", preset_name)
 
     def _on_exit(self) -> None:
         if self.icon:
@@ -132,6 +138,7 @@ class TrayIconManager:
         if pystray is None:
             raise RuntimeError("pystray 不可用，无法运行托盘图标")
 
+        logger.info("启动托盘图标，预设数量: %s", len(self.presets))
         self.icon = pystray.Icon(
             "window_sizer",
             create_icon_image(),

@@ -47,6 +47,28 @@ def test_tray_icon_create_menu():
         assert fake_pystray.MenuItem.call_count == 3
 
 
+def test_tray_icon_menu_handler_accepts_icon_and_item_arguments():
+    """测试托盘菜单 handler 兼容 pystray 的 (icon, item) 调用签名"""
+    from models import Preset
+
+    tray_icon = import_tray_icon()
+    fake_pystray = Mock()
+    fake_pystray.Menu.return_value = object()
+    fake_pystray.MenuItem.side_effect = lambda *args, **kwargs: ("item", args, kwargs)
+    fake_pystray.Menu.SEPARATOR = object()
+
+    with patch.object(tray_icon, "_load_pystray", return_value=fake_pystray):
+        manager = tray_icon.TrayIconManager([Preset(name="预设1", hotkey="ctrl+1")])
+        callback = Mock()
+        manager.set_preset_callback(callback)
+        manager._create_menu()
+
+        handler = fake_pystray.MenuItem.call_args_list[0][0][1]
+        handler(Mock(), Mock())
+
+        callback.assert_called_once_with("预设1")
+
+
 def test_tray_icon_set_callback():
     """测试设置回调"""
     tray_icon = import_tray_icon()

@@ -72,10 +72,17 @@ class WindowManagerApp:
 
             # 2. 注册热键
             self.hotkey_manager.register_presets(self.presets, self._on_hotkey_triggered)
+            if self.logger:
+                self.logger.info(
+                    "热键注册完成: %s",
+                    [f"{p.name}:{p.hotkey}" for p in self.presets if p.hotkey],
+                )
 
             # 3. 初始化托盘
             self.tray_icon = TrayIconManager(self.presets)
             self.tray_icon.set_preset_callback(self._on_preset_selected)
+            if self.logger:
+                self.logger.info("托盘菜单初始化完成，预设数量: %s", len(self.presets))
 
             return True
 
