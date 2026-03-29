@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from typing import Optional, Tuple, TYPE_CHECKING
+import ctypes
 import logging
 import os
 
@@ -40,6 +41,38 @@ class PositionCalculator:
 
         raise AttributeError("win32api/win32gui 都不支持 GetMonitorInfo")
 
+    def _get_desktop_physical_size(self) -> Optional[Tuple[int, int]]:
+        """读取 Windows 桌面 DC 的物理像素尺寸，作为单显示器缩放场景兜底。"""
+        try:
+            user32 = ctypes.windll.user32
+            gdi32 = ctypes.windll.gdi32
+        except Exception:
+            return None
+
+        desktop_hwnd = 0
+        hdc = None
+        try:
+            hdc = user32.GetDC(desktop_hwnd)
+            if not hdc:
+                return None
+
+            desktop_horzres = 118
+            desktop_vertres = 117
+            width = gdi32.GetDeviceCaps(hdc, desktop_horzres)
+            height = gdi32.GetDeviceCaps(hdc, desktop_vertres)
+            if width > 0 and height > 0:
+                return (width, height)
+        except Exception:
+            logger.debug("读取桌面物理像素尺寸失败", exc_info=True)
+        finally:
+            try:
+                if hdc:
+                    user32.ReleaseDC(desktop_hwnd, hdc)
+            except Exception:
+                logger.debug("释放桌面 DC 失败", exc_info=True)
+
+        return None
+
     def _get_physical_monitor_size(self, monitor_info, win32api, win32con) -> Optional[Tuple[int, int]]:
         device_name = monitor_info.get("Device")
         if not device_name:
@@ -74,6 +107,7 @@ class PositionCalculator:
         try:
             cursor_x, cursor_y = win32api.GetCursorPos()
             monitors = win32api.EnumDisplayMonitors()
+            desktop_physical_size = self._get_desktop_physical_size()
             logger.info("检测到 %s 个显示器", len(monitors))
             for idx, (hmonitor, _, _) in enumerate(monitors, start=1):
                 info = self._get_monitor_info(hmonitor, win32api, win32gui)
@@ -81,6 +115,8 @@ class PositionCalculator:
                 physical_size = self._get_physical_monitor_size(info, win32api, win32con)
                 if physical_size is not None:
                     width, height = physical_size
+                elif len(monitors) == 1 and desktop_physical_size is not None:
+                    width, height = desktop_physical_size
                 rect = info["Monitor"]
                 logger.info("显示器%s: %sx%s, rect=%s", idx, width, height, rect)
                 if rect[0] <= cursor_x <= rect[2] and rect[1] <= cursor_y <= rect[3]:

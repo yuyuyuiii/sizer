@@ -12,21 +12,31 @@ from tray_icon import TrayIconManager
 from notifier import Notifier
 
 
-def enable_windows_dpi_awareness() -> None:
+def enable_windows_dpi_awareness() -> str:
     """尽早开启 Windows DPI 感知，避免屏幕和窗口坐标被缩放虚拟化。"""
     if sys.platform != "win32":
-        return
+        return "non-windows"
+
+    try:
+        awareness_context = ctypes.c_void_p(-4)
+        if ctypes.windll.user32.SetProcessDpiAwarenessContext(awareness_context):
+            return "per-monitor-v2"
+    except Exception:
+        pass
 
     try:
         ctypes.windll.shcore.SetProcessDpiAwareness(2)
-        return
+        return "per-monitor"
     except Exception:
         pass
 
     try:
-        ctypes.windll.user32.SetProcessDPIAware()
+        if ctypes.windll.user32.SetProcessDPIAware():
+            return "system-dpi-aware"
     except Exception:
         pass
+
+    return "unsupported"
 
 
 class WindowManagerApp:
@@ -35,7 +45,7 @@ class WindowManagerApp:
     def __init__(self):
         """初始化应用组件"""
         self.logger = None
-        enable_windows_dpi_awareness()
+        self.dpi_awareness_mode = enable_windows_dpi_awareness()
         self._setup_logging()
         self.presets = []
         self.window_controller = WindowController()
@@ -193,6 +203,7 @@ class WindowManagerApp:
         self.logger.info("=" * 50)
         self.logger.info("Window Manager 启动")
         self.logger.info(f"日志文件: {log_file}")
+        self.logger.info(f"DPI awareness: {self.dpi_awareness_mode}")
 
     def run(self) -> None:
         """运行应用"""

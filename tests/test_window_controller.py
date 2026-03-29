@@ -234,6 +234,24 @@ def test_detect_screen_size_prefers_physical_resolution_from_display_settings():
     assert (calc.screen_width, calc.screen_height) == (2560, 1440)
 
 
+def test_detect_screen_size_falls_back_to_desktop_physical_size_for_single_monitor():
+    """测试单显示器且逻辑分辨率被缩放时，回退到桌面物理像素尺寸"""
+    fake_win32api = Mock()
+    fake_win32api.GetCursorPos.return_value = (100, 100)
+    fake_win32api.EnumDisplayMonitors.return_value = [("primary", None, None)]
+    fake_win32api.GetMonitorInfo.return_value = {"Monitor": (0, 0, 2048, 1152)}
+    fake_win32gui = types.SimpleNamespace()
+
+    with patch.object(PositionCalculator, "_get_desktop_physical_size", return_value=(2560, 1440)), \
+         patch.dict(
+             sys.modules,
+             {"win32api": fake_win32api, "win32gui": fake_win32gui, "win32con": Mock()},
+         ):
+        calc = PositionCalculator()
+
+    assert (calc.screen_width, calc.screen_height) == (2560, 1440)
+
+
 def test_window_controller_skips_own_active_window():
     """测试活动窗口是工具自身时会回退到其他活动窗口"""
     own_window = Mock()
