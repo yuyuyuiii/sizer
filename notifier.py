@@ -1,4 +1,7 @@
+import logging
 from plyer import notification
+
+logger = logging.getLogger(__name__)
 
 
 class Notifier:
@@ -36,8 +39,11 @@ class Notifier:
                 timeout=timeout
             )
             return True
+        except NotImplementedError as e:
+            logger.error(f"通知显示失败（平台不支持）: {e}")
+            return False
         except Exception as e:
-            print(f"通知显示失败: {e}")
+            logger.error(f"通知显示失败: {e}")
             return False
 
     def preset_applied(self, preset_name: str) -> bool:
