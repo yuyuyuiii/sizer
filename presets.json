@@ -1,3 +1,48 @@
 {
-  "presets": []
+  "presets": [
+    {
+      "name": "居中 1920x1080",
+      "width": 1920,
+      "height": 1080,
+      "position": "center",
+      "hotkey": "ctrl+shift+1"
+    },
+    {
+      "name": "居中 1600x900",
+      "width": 1600,
+      "height": 900,
+      "position": "center",
+      "hotkey": "ctrl+shift+2"
+    },
+    {
+      "name": "左上 1200x800",
+      "width": 1200,
+      "height": 800,
+      "position": "top-left",
+      "hotkey": "ctrl+shift+3"
+    },
+    {
+      "name": "右上 1200x800",
+      "width": 1200,
+      "height": 800,
+      "position": "top-right",
+      "hotkey": "ctrl+shift+4"
+    },
+    {
+      "name": "靠右 1280x720",
+      "width": 1280,
+      "height": 720,
+      "position": "right",
+      "hotkey": "ctrl+shift+r"
+    },
+    {
+      "name": "仅居中（保持原尺寸）",
+      "position": "center",
+      "hotkey": "ctrl+shift+0"
+    },
+    {
+      "name": "仅靠左（保持原尺寸）",
+      "position": "left"
+    }
+  ]
 }
