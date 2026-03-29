@@ -40,6 +40,27 @@ class PositionCalculator:
 
         raise AttributeError("win32api/win32gui 都不支持 GetMonitorInfo")
 
+    def _get_physical_monitor_size(self, monitor_info, win32api, win32con) -> Optional[Tuple[int, int]]:
+        device_name = monitor_info.get("Device")
+        if not device_name:
+            return None
+
+        enum_display_settings = getattr(win32api, "EnumDisplaySettings", None)
+        if not callable(enum_display_settings):
+            return None
+
+        try:
+            settings = enum_display_settings(device_name, win32con.ENUM_CURRENT_SETTINGS)
+        except Exception:
+            logger.debug("读取显示设备物理分辨率失败: device=%s", device_name, exc_info=True)
+            return None
+
+        width = getattr(settings, "dmPelsWidth", 0)
+        height = getattr(settings, "dmPelsHeight", 0)
+        if width > 0 and height > 0:
+            return (width, height)
+        return None
+
     def _detect_screen_size(self) -> Tuple[int, int]:
         """检测屏幕尺寸，优先选择光标或活动窗口所在显示器。"""
         try:
@@ -57,6 +78,9 @@ class PositionCalculator:
             for idx, (hmonitor, _, _) in enumerate(monitors, start=1):
                 info = self._get_monitor_info(hmonitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
+                physical_size = self._get_physical_monitor_size(info, win32api, win32con)
+                if physical_size is not None:
+                    width, height = physical_size
                 rect = info["Monitor"]
                 logger.info("显示器%s: %sx%s, rect=%s", idx, width, height, rect)
                 if rect[0] <= cursor_x <= rect[2] and rect[1] <= cursor_y <= rect[3]:
@@ -71,6 +95,9 @@ class PositionCalculator:
                 monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
                 info = self._get_monitor_info(monitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
+                physical_size = self._get_physical_monitor_size(info, win32api, win32con)
+                if physical_size is not None:
+                    width, height = physical_size
                 logger.info("选择活动窗口所在显示器: %sx%s", width, height)
                 return (width, height)
         except Exception:
@@ -83,6 +110,9 @@ class PositionCalculator:
             for hmonitor, _, _ in monitors:
                 info = self._get_monitor_info(hmonitor, win32api, win32gui)
                 width, height = self._get_monitor_size(info)
+                physical_size = self._get_physical_monitor_size(info, win32api, win32con)
+                if physical_size is not None:
+                    width, height = physical_size
                 area = width * height
                 if area > max_area:
                     max_area = area

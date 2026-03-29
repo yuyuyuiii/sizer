@@ -2,6 +2,7 @@
 import signal
 import sys
 import logging
+import ctypes
 from pathlib import Path
 from config import load_config
 from models import Preset
@@ -11,12 +12,30 @@ from tray_icon import TrayIconManager
 from notifier import Notifier
 
 
+def enable_windows_dpi_awareness() -> None:
+    """尽早开启 Windows DPI 感知，避免屏幕和窗口坐标被缩放虚拟化。"""
+    if sys.platform != "win32":
+        return
+
+    try:
+        ctypes.windll.shcore.SetProcessDpiAwareness(2)
+        return
+    except Exception:
+        pass
+
+    try:
+        ctypes.windll.user32.SetProcessDPIAware()
+    except Exception:
+        pass
+
+
 class WindowManagerApp:
     """窗口管理器应用类"""
 
     def __init__(self):
         """初始化应用组件"""
         self.logger = None
+        enable_windows_dpi_awareness()
         self._setup_logging()
         self.presets = []
         self.window_controller = WindowController()

@@ -211,6 +211,29 @@ def test_detect_screen_size_uses_win32api_get_monitor_info_when_win32gui_missing
     assert (calc.screen_width, calc.screen_height) == (2560, 1440)
 
 
+def test_detect_screen_size_prefers_physical_resolution_from_display_settings():
+    """测试显示器 rect 是缩放后的逻辑坐标时，优先读取物理分辨率"""
+    fake_win32api = Mock()
+    fake_win32api.GetCursorPos.return_value = (100, 100)
+    fake_win32api.EnumDisplayMonitors.return_value = [("primary", None, None)]
+    fake_win32api.GetMonitorInfo.return_value = {
+        "Monitor": (0, 0, 2048, 1152),
+        "Device": r"\\\\.\\DISPLAY1",
+    }
+    fake_settings = types.SimpleNamespace(dmPelsWidth=2560, dmPelsHeight=1440)
+    fake_win32api.EnumDisplaySettings.return_value = fake_settings
+    fake_win32con = types.SimpleNamespace(ENUM_CURRENT_SETTINGS=-1)
+    fake_win32gui = types.SimpleNamespace()
+
+    with patch.dict(
+        sys.modules,
+        {"win32api": fake_win32api, "win32gui": fake_win32gui, "win32con": fake_win32con},
+    ):
+        calc = PositionCalculator()
+
+    assert (calc.screen_width, calc.screen_height) == (2560, 1440)
+
+
 def test_window_controller_skips_own_active_window():
     """测试活动窗口是工具自身时会回退到其他活动窗口"""
     own_window = Mock()

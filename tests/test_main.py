@@ -41,14 +41,16 @@ def test_app_initialize_with_config():
 
 
 def test_app_init_sets_up_logging_before_window_controller():
-    """测试日志初始化先于 WindowController 创建"""
+    """测试 DPI 感知和日志初始化先于 WindowController 创建"""
     main = import_main()
     order = []
 
-    with patch.object(main.WindowManagerApp, "_setup_logging", autospec=True) as mock_logging, \
+    with patch.object(main, "enable_windows_dpi_awareness") as mock_dpi, \
+         patch.object(main.WindowManagerApp, "_setup_logging", autospec=True) as mock_logging, \
          patch.object(main, "WindowController") as mock_wc_cls, \
          patch.object(main, "HotkeyManager") as mock_hotkey_cls, \
          patch.object(main, "Notifier") as mock_notifier_cls:
+        mock_dpi.side_effect = lambda: order.append("dpi")
         mock_logging.side_effect = lambda self: order.append("logging")
         mock_wc_cls.side_effect = lambda: order.append("window_controller") or Mock()
         mock_hotkey_cls.return_value = Mock()
@@ -56,7 +58,7 @@ def test_app_init_sets_up_logging_before_window_controller():
 
         main.WindowManagerApp()
 
-    assert order[:2] == ["logging", "window_controller"]
+    assert order[:3] == ["dpi", "logging", "window_controller"]
 
 
 def test_app_initialize_duplicate_hotkey_error():
