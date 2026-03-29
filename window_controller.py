@@ -41,11 +41,7 @@ class PositionCalculator:
         """
         win_width, win_height = window_size
 
-        # 窗口尺寸限制不超过屏幕尺寸
-        win_width = min(win_width, self.screen_width)
-        win_height = min(win_height, self.screen_height)
-
-        # 计算位置
+        # 计算位置(不限制窗口尺寸,允许窗口大于屏幕)
         if position == "center":
             left = (self.screen_width - win_width) // 2
             top = (self.screen_height - win_height) // 2

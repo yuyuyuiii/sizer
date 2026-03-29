@@ -84,15 +84,21 @@ class WindowManagerApp:
         Args:
             preset_name: 预设名称
         """
-        # 查找预设
+        # 调试: 打印传入的预设名称
+        print(f"[调试] 收到预设选择请求: '{preset_name}'")
+        print(f"[调试] 可用预设列表: {[p.name for p in self.presets]}")
+
+        # 查找预设(支持去除空格的模糊匹配)
         preset = None
+        preset_name_clean = preset_name.strip()
         for p in self.presets:
-            if p.name == preset_name:
+            if p.name.strip() == preset_name_clean:
                 preset = p
                 break
 
         if preset is None:
             self.notifier.show("错误", f"预设 '{preset_name}' 不存在", error=True)
+            print(f"[错误] 未找到预设: '{preset_name}' (清理后: '{preset_name_clean}')")
             return
 
         # 打印应用信息

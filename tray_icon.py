@@ -89,6 +89,7 @@ class TrayIconManager:
         Args:
             preset_name: 预设名称
         """
+        print(f"[调试] 托盘菜单点击预设: '{preset_name}'")
         if self.on_preset_selected:
             self.on_preset_selected(preset_name)
 
