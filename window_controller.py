@@ -19,8 +19,12 @@ class PositionCalculator:
         if screen_width is None or screen_height is None:
             try:
                 import win32api
-                screen_width = screen_width or win32api.GetSystemMetrics(0)
-                screen_height = screen_height or win32api.GetSystemMetrics(1)
+                # 使用 SM_CXSCREEN 和 SM_CYSCREEN 获取真实屏幕分辨率
+                # GetSystemMetrics(0) 返回工作区宽度(不含任务栏)
+                # GetSystemMetrics(78) 返回屏幕宽度 SM_CXSCREEN
+                # GetSystemMetrics(79) 返回屏幕高度 SM_CYSCREEN
+                screen_width = screen_width or win32api.GetSystemMetrics(78)  # SM_CXSCREEN
+                screen_height = screen_height or win32api.GetSystemMetrics(79)  # SM_CYSCREEN
             except ImportError:
                 # 无法导入 win32api 时使用默认值
                 screen_width = screen_width or 1920
@@ -107,12 +111,12 @@ class WindowController:
             成功返回 True，失败返回 False
         """
         import logging
-        logger = logging.getLogger("WindowController")
+        logger = logging.getLogger()  # 使用 root logger
 
         try:
             window = self.get_active_window()
             if window is None:
-                logger.warning("未找到活动窗口")
+                logger.warning("WindowController: 未找到活动窗口")
                 return False
 
             # 记录窗口初始状态

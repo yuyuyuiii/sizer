@@ -1,5 +1,6 @@
 """托盘图标管理器"""
 from typing import List, Callable
+from functools import partial
 from PIL import Image, ImageDraw
 import pystray
 from models import Preset
@@ -65,10 +66,16 @@ class TrayIconManager:
 
         # 为每个预设创建菜单项
         for preset in self.presets:
+            # 使用闭包确保每个MenuItem调用时能正确传递预设名称
+            def make_handler(name):
+                def handler(item):
+                    self._on_preset_clicked(name)
+                return handler
+
             menu_items.append(
                 pystray.MenuItem(
                     preset.name,
-                    lambda _, preset_name=preset.name: self._on_preset_clicked(preset_name)
+                    make_handler(preset.name)
                 )
             )
 
