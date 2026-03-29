@@ -1,4 +1,6 @@
 import pytest
+import sys
+import types
 from unittest.mock import Mock, patch
 from window_controller import WindowController, PositionCalculator
 from models import Preset
@@ -81,6 +83,16 @@ def test_window_controller_apply_preset_with_mock_window():
         mock_window = Mock()
         mock_window.width = 1000
         mock_window.height = 800
+        mock_window.left = 160
+        mock_window.top = 90
+        mock_window.resizeTo.side_effect = lambda width, height: (
+            setattr(mock_window, "width", width),
+            setattr(mock_window, "height", height),
+        )
+        mock_window.moveTo.side_effect = lambda left, top: (
+            setattr(mock_window, "left", left),
+            setattr(mock_window, "top", top),
+        )
         mock_get_active.return_value = mock_window
 
         controller = WindowController()
@@ -100,6 +112,16 @@ def test_window_controller_apply_preset_keep_original_size():
         mock_window = Mock()
         mock_window.width = 1000
         mock_window.height = 800
+        mock_window.left = 460
+        mock_window.top = 140
+        mock_window.resizeTo.side_effect = lambda width, height: (
+            setattr(mock_window, "width", width),
+            setattr(mock_window, "height", height),
+        )
+        mock_window.moveTo.side_effect = lambda left, top: (
+            setattr(mock_window, "left", left),
+            setattr(mock_window, "top", top),
+        )
         mock_get_active.return_value = mock_window
 
         controller = WindowController()
@@ -151,3 +173,70 @@ def test_position_calculator_all_positions():
     for pos, expected in positions.items():
         result = calc.calculate(pos, win_size)
         assert result == expected, f"位置 {pos} 计算错误: 期望 {expected}, 实际 {result}"
+
+
+def test_detect_screen_size_prefers_cursor_monitor():
+    """测试屏幕检测优先选择鼠标所在显示器"""
+    monitors = [
+        ("small", None, None),
+        ("large", None, None),
+    ]
+    fake_win32api = Mock()
+    fake_win32api.GetCursorPos.return_value = (2100, 100)
+    fake_win32api.EnumDisplayMonitors.return_value = monitors
+    fake_win32api.GetSystemMetrics.side_effect = AssertionError("不应回退到系统指标")
+    fake_win32gui = Mock()
+    fake_win32gui.GetMonitorInfo.side_effect = [
+        {"Monitor": (0, 0, 1920, 1080)},
+        {"Monitor": (1920, 0, 4480, 1440)},
+    ]
+
+    with patch.dict(sys.modules, {"win32api": fake_win32api, "win32gui": fake_win32gui, "win32con": Mock()}):
+        calc = PositionCalculator()
+
+    assert (calc.screen_width, calc.screen_height) == (2560, 1440)
+
+
+def test_window_controller_skips_own_active_window():
+    """测试活动窗口是工具自身时会回退到其他活动窗口"""
+    own_window = Mock()
+    own_window.isActive = True
+    own_window._hWnd = 100
+    target_window = Mock()
+    target_window.isActive = True
+    target_window._hWnd = 200
+
+    fake_gw = types.SimpleNamespace(
+        getActiveWindow=lambda: own_window,
+        getAllWindows=lambda: [own_window, target_window],
+    )
+    fake_win32process = types.SimpleNamespace(
+        GetWindowThreadProcessId=Mock(side_effect=[(1, 9999), (1, 9999), (1, 8888)])
+    )
+
+    with patch("window_controller.os.getpid", return_value=9999), \
+         patch.dict(sys.modules, {"pygetwindow": fake_gw, "win32process": fake_win32process}):
+        controller = WindowController()
+        result = controller.get_active_window()
+
+    assert result is target_window
+
+
+def test_apply_preset_returns_false_when_window_state_mismatch():
+    """测试窗口调整后尺寸明显不匹配时返回失败"""
+    with patch.object(WindowController, "get_active_window") as mock_get_active:
+        mock_window = Mock()
+        mock_window.width = 1000
+        mock_window.height = 800
+        mock_window.left = 0
+        mock_window.top = 0
+        mock_window.resizeTo.side_effect = lambda width, height: None
+        mock_window.moveTo.side_effect = lambda left, top: None
+        mock_get_active.return_value = mock_window
+
+        controller = WindowController()
+        preset = Preset(name="测试", width=1600, height=900, position="center")
+
+        result = controller.apply_preset(preset)
+
+        assert result is False

@@ -16,13 +16,14 @@ class WindowManagerApp:
 
     def __init__(self):
         """初始化应用组件"""
+        self.logger = None
+        self._setup_logging()
         self.presets = []
         self.window_controller = WindowController()
         self.hotkey_manager = HotkeyManager()
         self.tray_icon = None
         self.notifier = Notifier(enabled=True)
         self.running = False
-        self.logger = None
 
     def initialize(self) -> bool:
         """
@@ -32,9 +33,6 @@ class WindowManagerApp:
             bool: 初始化成功返回 True，失败返回 False
         """
         try:
-            # 配置日志
-            self._setup_logging()
-
             # 1. 加载配置
             self.presets = load_config()
 

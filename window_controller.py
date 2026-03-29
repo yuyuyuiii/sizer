@@ -1,104 +1,102 @@
 """窗口控制器模块"""
 
+from __future__ import annotations
+
 from typing import Optional, Tuple, TYPE_CHECKING
+import logging
+import os
 
 if TYPE_CHECKING:
     from models import Preset
+
+
+logger = logging.getLogger("WindowController")
+DEFAULT_SCREEN_SIZE = (1920, 1080)
+WINDOW_TOLERANCE = 5
 
 
 class PositionCalculator:
     """位置计算器"""
 
     def __init__(self, screen_width: Optional[int] = None, screen_height: Optional[int] = None):
-        """初始化位置计算器
-
-        Args:
-            screen_width: 屏幕宽度，如果不提供则自动检测
-            screen_height: 屏幕高度，如果不提供则自动检测
-        """
         if screen_width is None or screen_height is None:
-            # 尝试使用多种方法获取真实屏幕分辨率
             screen_width, screen_height = self._detect_screen_size()
 
         self.screen_width = screen_width
         self.screen_height = screen_height
 
-    def _detect_screen_size(self) -> Tuple[int, int]:
-        """检测屏幕尺寸,尝试多种方法"""
-        import logging
-        logger = logging.getLogger("WindowController")
+    def _get_monitor_size(self, monitor_info) -> Tuple[int, int]:
+        rect = monitor_info["Monitor"]
+        return (rect[2] - rect[0], rect[3] - rect[1])
 
+    def _detect_screen_size(self) -> Tuple[int, int]:
+        """检测屏幕尺寸，优先选择光标或活动窗口所在显示器。"""
         try:
             import win32api
             import win32con
-
-            # 方法 1: 使用 GetSystemMetrics 和 SM_CXSCREEN/SM_CYSCREEN
-            try:
-                width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
-                height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
-                logger.info(f"方法1 GetSystemMetrics(SM_CXSCREEN/SM_CYSCREEN): {width}x{height}")
-                if width > 0 and height > 0:
-                    return (width, height)
-            except Exception as e:
-                logger.debug(f"方法1失败: {e}")
-
-            # 方法 2: 使用枚举显示器 - 寻找最大的显示器
-            try:
-                import win32gui
-                monitors = win32api.EnumDisplayMonitors()
-                logger.info(f"检测到 {len(monitors)} 个显示器")
-                if monitors:
-                    max_area = 0
-                    best_monitor = None
-                    for idx, (hmonitor, _, _) in enumerate(monitors):
-                        info = win32gui.GetMonitorInfo(hmonitor)
-                        rc = info['Monitor']
-                        w = rc[2] - rc[0]
-                        h = rc[3] - rc[1]
-                        area = w * h
-                        logger.info(f"  显示器{idx+1}: {w}x{h} (面积={area})")
-                        if area > max_area:
-                            max_area = area
-                            best_monitor = (w, h)
-                    if best_monitor:
-                        logger.info(f"选择最大显示器: {best_monitor[0]}x{best_monitor[1]}")
-                        return best_monitor
-            except Exception as e:
-                logger.debug(f"方法2失败: {e}")
-
-            # 方法 3: 使用 SM_CXFULLSCREEN/SM_CYFULLSCREEN (工作区)
-            try:
-                width = win32api.GetSystemMetrics(win32con.SM_CXFULLSCREEN)
-                height = win32api.GetSystemMetrics(win32con.SM_CYFULLSCREEN)
-                logger.info(f"方法3 GetSystemMetrics(SM_CXFULLSCREEN/SM_CYFULLSCREEN): {width}x{height}")
-                if width > 0 and height > 0:
-                    return (width, height)
-            except Exception as e:
-                logger.debug(f"方法3失败: {e}")
-
-            # 方法 4: 使用硬编码的默认值
-            logger.warning("所有检测方法失败,使用默认值 1920x1080")
-            return (1920, 1080)
-
+            import win32gui
         except ImportError:
-            # 无法导入 win32api 时使用默认值
             logger.warning("未找到 win32api,使用默认值 1920x1080")
-            return (1920, 1080)
+            return DEFAULT_SCREEN_SIZE
+
+        try:
+            cursor_x, cursor_y = win32api.GetCursorPos()
+            monitors = win32api.EnumDisplayMonitors()
+            logger.info("检测到 %s 个显示器", len(monitors))
+            for idx, (hmonitor, _, _) in enumerate(monitors, start=1):
+                info = win32gui.GetMonitorInfo(hmonitor)
+                width, height = self._get_monitor_size(info)
+                rect = info["Monitor"]
+                logger.info("显示器%s: %sx%s, rect=%s", idx, width, height, rect)
+                if rect[0] <= cursor_x <= rect[2] and rect[1] <= cursor_y <= rect[3]:
+                    logger.info("选择鼠标所在显示器: %sx%s", width, height)
+                    return (width, height)
+        except Exception:
+            logger.debug("基于鼠标位置检测显示器失败", exc_info=True)
+
+        try:
+            hwnd = win32gui.GetForegroundWindow()
+            if hwnd:
+                monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+                info = win32gui.GetMonitorInfo(monitor)
+                width, height = self._get_monitor_size(info)
+                logger.info("选择活动窗口所在显示器: %sx%s", width, height)
+                return (width, height)
+        except Exception:
+            logger.debug("基于活动窗口检测显示器失败", exc_info=True)
+
+        try:
+            monitors = win32api.EnumDisplayMonitors()
+            largest = None
+            max_area = -1
+            for hmonitor, _, _ in monitors:
+                info = win32gui.GetMonitorInfo(hmonitor)
+                width, height = self._get_monitor_size(info)
+                area = width * height
+                if area > max_area:
+                    max_area = area
+                    largest = (width, height)
+            if largest:
+                logger.info("选择最大显示器: %sx%s", largest[0], largest[1])
+                return largest
+        except Exception:
+            logger.debug("基于最大显示器回退失败", exc_info=True)
+
+        try:
+            width = win32api.GetSystemMetrics(win32con.SM_CXSCREEN)
+            height = win32api.GetSystemMetrics(win32con.SM_CYSCREEN)
+            logger.info("回退到系统指标: %sx%s", width, height)
+            if width > 0 and height > 0:
+                return (width, height)
+        except Exception:
+            logger.debug("使用系统指标获取屏幕尺寸失败", exc_info=True)
+
+        logger.warning("所有检测方法失败,使用默认值 1920x1080")
+        return DEFAULT_SCREEN_SIZE
 
     def calculate(self, position: str, window_size: Tuple[int, int]) -> Tuple[int, int]:
-        """计算窗口位置
-
-        Args:
-            position: 位置字符串，支持: center, top-left, top-right, bottom-left, bottom-right, left, right, top, bottom
-            window_size: 窗口尺寸 (width, height)
-
-        Returns:
-            (left, top) 坐标元组
-        """
         win_width, win_height = window_size
 
-        # 计算位置（限制窗口在屏幕可见区域内）
-        # 即使窗口大于屏幕，也确保至少左上角对齐屏幕左上角
         if position == "center":
             left = max(0, (self.screen_width - win_width) // 2)
             top = max(0, (self.screen_height - win_height) // 2)
@@ -127,7 +125,6 @@ class PositionCalculator:
             left = max(0, (self.screen_width - win_width) // 2)
             top = max(0, self.screen_height - win_height)
         else:
-            # 未知位置，默认居中
             left = max(0, (self.screen_width - win_width) // 2)
             top = max(0, (self.screen_height - win_height) // 2)
 
@@ -138,114 +135,126 @@ class WindowController:
     """窗口控制器"""
 
     def __init__(self):
-        """初始化窗口控制器"""
         self.calculator = PositionCalculator()
 
-    def get_active_window(self):
-        """获取当前活动窗口
+    def _is_own_window(self, window) -> bool:
+        hwnd = getattr(window, "_hWnd", None)
+        if hwnd is None:
+            return False
 
-        Returns:
-            活动窗口对象，如果无活动窗口则返回 None
-        """
+        try:
+            import win32process
+        except ImportError:
+            return False
+
+        try:
+            _, pid = win32process.GetWindowThreadProcessId(hwnd)
+            return pid == os.getpid()
+        except Exception:
+            logger.debug("获取窗口进程信息失败: hwnd=%s", hwnd, exc_info=True)
+            return False
+
+    def get_active_window(self):
+        """获取当前活动窗口，并排除工具自身窗口。"""
         try:
             import pygetwindow as gw
-            return gw.getActiveWindow()
         except Exception:
             return None
 
-    def apply_preset(self, preset: 'Preset') -> bool:
-        """应用预设到当前活动窗口
+        try:
+            active_window = gw.getActiveWindow()
+            if active_window is not None and not self._is_own_window(active_window):
+                return active_window
 
-        Args:
-            preset: 窗口预设配置
+            for window in gw.getAllWindows():
+                if getattr(window, "isActive", False) and not self._is_own_window(window):
+                    return window
+        except Exception:
+            logger.debug("获取活动窗口失败", exc_info=True)
 
-        Returns:
-            成功返回 True，失败返回 False
-        """
-        import logging
-        logger = logging.getLogger()  # 使用 root logger
+        return None
+
+    def _matches_target(self, actual: Optional[int], expected: Optional[int]) -> bool:
+        if actual is None or expected is None:
+            return True
+        if not isinstance(actual, (int, float)) or not isinstance(expected, (int, float)):
+            return True
+        return abs(actual - expected) <= WINDOW_TOLERANCE
+
+    def apply_preset(self, preset: "Preset") -> bool:
+        """应用预设到当前活动窗口。"""
+        root_logger = logging.getLogger()
 
         try:
             window = self.get_active_window()
             if window is None:
-                logger.warning("WindowController: 未找到活动窗口")
+                root_logger.warning("WindowController: 未找到活动窗口")
                 return False
 
-            # 记录窗口初始状态
-            logger.info(f"=== 应用预设: {preset.name} ===")
-            logger.info(f"预设参数: width={preset.width}, height={preset.height}, position={preset.position}")
-            logger.info(f"屏幕分辨率: {self.calculator.screen_width}x{self.calculator.screen_height}")
+            root_logger.info("=== 应用预设: %s ===", preset.name)
+            root_logger.info(
+                "预设参数: width=%s, height=%s, position=%s",
+                preset.width,
+                preset.height,
+                preset.position,
+            )
+            root_logger.info(
+                "屏幕分辨率: %sx%s",
+                self.calculator.screen_width,
+                self.calculator.screen_height,
+            )
 
-            # 记录窗口当前状态
             try:
-                current_width = window.width
-                current_height = window.height
-                logger.info(f"窗口当前尺寸: {current_width}x{current_height}")
-                # 尝试获取最大化状态（如果支持）
-                try:
-                    is_maximized = getattr(window, 'is_maximized', None)
-                    if is_maximized is not None:
-                        logger.info(f"窗口最大化状态: {is_maximized}")
-                except Exception:
-                    pass
-            except Exception as e:
-                logger.warning(f"无法获取窗口当前尺寸: {e}")
+                root_logger.info("窗口当前尺寸: %sx%s", window.width, window.height)
+            except Exception:
+                root_logger.warning("无法获取窗口当前尺寸", exc_info=True)
 
-            # 如果窗口最小化或最大化，先恢复
             try:
-                logger.debug("调用 window.restore()")
                 window.restore()
-                logger.debug("restore() 执行完成")
-                # 记录 restore 后的窗口状态
-                try:
-                    restored_width = window.width
-                    restored_height = window.height
-                    logger.info(f"restore 后窗口尺寸: {restored_width}x{restored_height}")
-                except Exception:
-                    pass
-            except Exception as e:
-                logger.warning(f"restore() 失败: {e}")
-                # 如果 restore 失败，继续尝试
-                pass
+            except Exception:
+                root_logger.warning("restore() 失败", exc_info=True)
 
-            # 确定目标尺寸
             if preset.width is not None and preset.height is not None:
                 target_width = preset.width
                 target_height = preset.height
             else:
-                # 保持窗口原尺寸
                 target_width = window.width
                 target_height = window.height
 
-            logger.info(f"目标尺寸: {target_width}x{target_height}")
-
-            # 计算目标位置
             left, top = self.calculator.calculate(preset.position, (target_width, target_height))
-            logger.info(f"计算出的位置: left={left}, top={top}")
 
-            # 应用尺寸和位置
-            logger.info(f"准备调用: resizeTo({target_width}, {target_height})")
             window.resizeTo(target_width, target_height)
-            logger.info(f"resizeTo 完成")
-
-            logger.info(f"准备调用: moveTo({left}, {top})")
             window.moveTo(left, top)
-            logger.info(f"moveTo 完成")
 
-            # 验证结果
-            try:
-                final_width = window.width
-                final_height = window.height
-                final_left = window.left if hasattr(window, 'left') else None
-                final_top = window.top if hasattr(window, 'top') else None
-                logger.info(f"最终窗口尺寸: {final_width}x{final_height}")
-                if final_left is not None and final_top is not None:
-                    logger.info(f"最终窗口位置: left={final_left}, top={final_top}")
-                logger.info(f"=== 预设应用完成 ===")
-            except Exception as e:
-                logger.warning(f"无法获取最终窗口状态: {e}")
+            final_width = getattr(window, "width", None)
+            final_height = getattr(window, "height", None)
+            final_left = getattr(window, "left", None)
+            final_top = getattr(window, "top", None)
 
-            return True
-        except Exception as e:
-            logger.exception(f"应用预设失败: {e}")
+            size_ok = self._matches_target(final_width, target_width) and self._matches_target(
+                final_height, target_height
+            )
+            position_ok = self._matches_target(final_left, left) and self._matches_target(final_top, top)
+
+            if not size_ok:
+                root_logger.warning(
+                    "窗口尺寸调整不匹配: 目标=%sx%s, 实际=%sx%s",
+                    target_width,
+                    target_height,
+                    final_width,
+                    final_height,
+                )
+            if not position_ok:
+                root_logger.warning(
+                    "窗口位置调整不匹配: 目标=(%s, %s), 实际=(%s, %s)",
+                    left,
+                    top,
+                    final_left,
+                    final_top,
+                )
+
+            root_logger.info("=== 预设应用完成 ===")
+            return size_ok and position_ok
+        except Exception:
+            root_logger.exception("应用预设失败")
             return False
